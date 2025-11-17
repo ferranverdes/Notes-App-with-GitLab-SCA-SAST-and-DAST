@@ -1,8 +1,20 @@
 # 🗒️ Notes App with GitLab SCA, SAST and DAST
 
-A minimal REST API built to demonstrate secure, automated deployments on Google Cloud using Pulumi, GitLab CI/CD, and **multi-environment pipelines**:
+## ⚡ TLDR
+
+* Minimal Notes REST API (create/list notes) built with Express and Prisma.  
+* Deployed to Google Cloud Run via Pulumi, orchestrated end-to-end by GitLab CI/CD.  
+* Three fully isolated environments (**dev**, **stage**, **prod**) using separate GCP projects, credentials, and Pulumi stacks.  
+* Data seed strategy per environment: **dev** is purged and reseeded on every deploy, **stage** is seeded while preserving existing data, and **prod** is never seeded.  
+* Access control enforced with GCP IAM: **dev** is kept private, **stage** is only reachable by the GitLab DAST service account, and **prod** is publicly accessible.  
+* Security integrated into the pipeline with GitLab **SCA, SAST, IaC scanning, Secret Detection, and DAST**, with **DAST running only on `main`** so findings appear in the Vulnerability Report dashboard.  
+* Developer-friendly workflow: local development on PostgreSQL, isolated tests on SQLite, and a simple promotion model `feature/* → dev → main → prod`.
 
 ![Architecture overview][1]
+
+## 🧩 Project Context
+
+A minimal REST API built to demonstrate secure, automated deployments on Google Cloud using Pulumi, GitLab CI/CD, and **multi-environment pipelines**.
 
 This project is designed for learning purposes, showcasing how to integrate **GitLab's built-in SCA, SAST**, and **DAST** — helping developers understand how security automation fits into a real DevSecOps workflow.
 
@@ -11,7 +23,7 @@ The app exposes two endpoints:
 * **POST `/notes`** → Creates a new note and returns `{ title, description }`.  
 * **GET `/notes`** → Retrieves a list of all existing notes.  
 
-It is intentionally simple: no validation, no authentication, and no dependencies beyond what is strictly required.
+It is intentionally simple: no validation, no authentication, and no dependencies beyond what is strictly required, with certain vulnerabilities deliberately included to be reported by automated scans.
 
 ## ☁️ Cloud Deployment (GitLab + Pulumi + GCP)
 
@@ -34,7 +46,7 @@ Pulumi uses an access token to authenticate and manage your infrastructure state
     * **Value:** (paste your Pulumi token).
     * **Environment:** "All (default)"
     * **Visibility:** ✅ **Masked**  
-    * **Flags:** 🚫 **Unset the "Protect variable"** checkbox.
+    * **Flags:** 🚫 **Unset the "Protect variable"** checkbox for demonstration purposes.
 
 This allows Pulumi to manage infrastructure for all environments securely during CI/CD runs.
 
@@ -42,11 +54,11 @@ This allows Pulumi to manage infrastructure for all environments securely during
 
 You'll need one Google Cloud project per environment.
 
-| Environment | Example project ID | Example project number |
-|--------------|-------------------|------------------------|
-| Development  | `notes-dev-191823` | `491823450981` |
-| Staging      | `notes-stage-298734` | `238734109871` |
-| Production   | `notes-prod-716232` | `716232908736` |
+| Environment | Example project ID |
+|--------------|-------------------|
+| Development  | `notes-dev-191823` |
+| Staging      | `notes-stage-298734` |
+| Production   | `notes-prod-716232` |
 
 Create them in **Google Cloud Console → Manage Resources → Create Project**.
 
@@ -62,7 +74,7 @@ Each environment needs a service account with permissions to deploy via Pulumi.
 
 4. Generate a **JSON key** and download it to your local machine.
 
-#### 🔒 Additional service account for DAST (staging only)
+#### 🔐 Additional service account for DAST (staging only)
 
 In the **staging** project, create an extra service account named `gitlab-dast-sa`.  
 This account will be used by GitLab DAST to authenticate and scan your deployed service.
@@ -105,33 +117,45 @@ environments/build
 environments/deploy
 ```
 
-Update the following files with your **project's ID** and **project number**:
+Update the following files with your **project's ID**:
 
 * `Pulumi.dev.yaml`
-* `Pulumi.stage.yaml`
+* `Pulumi.main.yaml`, intended for the configuration of the staging environment.
 * `Pulumi.prod.yaml`
 
 These files define which GCP project and resources are used during each environment's deployment.
+
+#### 🔐 Environment Accessibility (IAM Controls)
+
+Access to each deployed Cloud Run service is enforced through **GCP IAM–based access control**:
+
+* **dev** → Not accessible to anyone (intended to later grant access to a group of developers).
+* **stage** → Accessible **only** by the GitLab DAST service account. In real-world scenarios, a developer group can also be granted access.
+* **prod** → Publicly accessible.
 
 ### 7️⃣ Understand branch behaviour
 
 | Branch | Purpose | Pipeline Behaviour |
 |---------|----------|--------------------|
-| `main` | Stable source code — reference branch | No automatic deployment |
-| `dev` | Development environment | Runs `pulumi up --yes` for dev |
-| `stage` | Staging environment | Runs `pulumi up --yes` for stage |
-| `prod` | Production environment | Runs `pulumi up --yes` for prod |
+| `main` | Default branch mapped to staging environment | Runs `pulumi up --yes` for stage |
+| `dev` | Mapped to development environment | Runs `pulumi up --yes` for dev |
+| `prod` | Mapped to production environment | Runs `pulumi up --yes` for prod |
+
+**Important:**  
+Only the **main** branch runs **DAST scans**, because GitLab only aggregates findings from the **default branch** into the **Vulnerability Report Dashboard**.
 
 ### 8️⃣ Typical workflow pattern
 
+This project suggests a simple and clear workflow where code moves progressively from feature branches to development, then staging, and finally production.
+The **main** branch serves as the central, stable source of truth for the project.
+
 ```text
-feature/*  →  main  →  dev  →  stage  →  prod
+feature/*  →  dev  →  main  →  prod
 ```
 
-1. Developers merge feature branches into `main`.  
-2. When ready for testing: merge `main` → `dev`.  
-3. When validated: merge `dev` → `stage`.
-4. When approved for release: merge `stage` → `prod`.
+1. Developers merge feature branches into `dev`.
+2. When validated: merge `dev` → `main`, which deploys to staging and runs DAST.
+3. When approved for release: merge `main` → `prod`, which deploys to production.
 
 Each merge triggers the pipeline for that environment automatically.
 
@@ -276,7 +300,7 @@ Expected output:
 🚀 Notes API running on http://localhost:3000
 ```
 
-### 6️⃣ Test the endpoints
+### 6️⃣ Check the endpoints
 
 #### ➕ Create a new note
 
@@ -344,15 +368,70 @@ When you run the tests:
 
 ✅ **Result:** fast, repeatable, and safe testing for local development.
 
-## 🔐 Upcoming Security Integrations
+## 🛠️ What the `.gitlab-ci.yml` File Contains
 
-The next releases will include:
+The `.gitlab-ci.yml` file in this repository orchestrates the complete CI/CD and security workflow.
 
-* **🔍 SCA (Software Composition Analysis)** — automatically detect vulnerable dependencies.  
-* **🧠 SAST (Static Application Security Testing)** — scan your code for vulnerabilities before deployment.  
-* **🧪 DAST (Dynamic Application Security Testing)** — test your live application endpoints for real-world attack patterns.  
+### 🏗️ Pipeline Stages
 
-Once integrated, GitLab pipelines will run these scans automatically for each environment (`dev`, `stage`, `prod`), allowing you to **see and fix security findings directly within your CI/CD workflow**.
+* **`test`** → Runs the application test suite (against SQLite) and multiple static code scans.
+* **`build`** → Uses Pulumi to build the application container image and push it to Artifact Registry.
+* **`deploy`** → Uses Pulumi to deploy infrastructure and the Notes API to the target environment (dev, stage, prod).
+* **`dast`** → Runs GitLab DAST scans against the staging environment (only on `main` branch).
+
+![Pipeline jobs][2]
+
+### 🔍 Security Scanning Jobs
+
+The pipeline reuses GitLab's built-in security templates to provide:
+
+* **Dependency Scanning (SCA)** — Finds vulnerabilities in third-party libraries.  
+* **Secret Detection** — Detects hard-coded secrets in the repository.  
+* **SAST (Semgrep)** — Analyses application source code for vulnerabilities.  
+* **IaC SAST (KICS)** — Scans Pulumi and IaC artefacts for misconfigurations.  
+* **API Security / DAST** — Runs dynamic tests against the running staging service.
+
+These jobs run automatically on relevant branches and upload results back to GitLab.
+
+### 🌐 Environment-Specific Deployments
+
+Based on the branch:
+
+* `dev` → Deploys to the **development** environment using `Pulumi.dev.yaml`.  
+* `main` → Deploys to the **staging** environment using `Pulumi.main.yaml` and triggers **DAST**.  
+* `prod` → Deploys to the **production** environment using `Pulumi.prod.yaml`.  
+
+Each environment uses its own `GOOGLE_CREDENTIALS_B64` (and `GOOGLE_CREDENTIALS_DAST_B64` only for staging).
+
+### 🌱 Database Seeding Logic
+
+The deployment jobs also control seeding:
+
+* **dev** → Purges existing data and re-seeds from scratch on every deploy.  
+* **stage** → Seeds new records without removing existing staging data.  
+* **prod** → Never seeds, to protect real production data.
+
+In summary, `.gitlab-ci.yml` ties together testing, building, deployment, and security scanning into a single automated workflow.
+
+## 🛡️ GitLab Vulnerability Report Dashboard
+
+The **Vulnerability Report Dashboard** in GitLab aggregates security findings produced by the pipeline.
+
+![Vulnerability report dashboard][3]
+
+GitLab aggregates findings into the dashboard **only from the default branch** (`main` in this project).
+
+## 🔐 Security Integrations
+
+All previously described security features are already integrated:
+
+* **🔍 SCA (Software Composition Analysis)** — Automatically detects vulnerable dependencies.  
+* **🧠 SAST (Static Application Security Testing)** — Scans your code for vulnerabilities before deployment.  
+* **🧪 DAST (Dynamic Application Security Testing)** — Tests your live staging endpoints for real-world attack patterns.  
+* **🔑 Secret Detection** — Identifies hard-coded credentials and secrets.  
+* **📦 IaC SAST (KICS)** — Scans your Pulumi and other IaC artefacts for misconfigurations.  
+
+GitLab pipelines run these scans automatically for each relevant branch, allowing you to **see and fix security findings directly within your CI/CD workflow and the Vulnerability Report Dashboard**.
 
 ## 🧩 Tech Stack Overview
 
@@ -372,17 +451,19 @@ This project demonstrates how to:
 * Build and deploy cloud-native applications using **Pulumi and GitLab CI/CD**.  
 * Create **multi-environment pipelines** for `dev`, `stage`, and `prod`.  
 * Manage **secure credentials** and environment-specific configurations.  
-* Integrate **security automation** with GitLab's SCA, SAST, and DAST.  
+* Integrate **security automation** with GitLab's SCA, SAST, DAST, Secret Detection, and IaC scanning.  
 
 ## 🧭 Summary
 
 Once configured:
 
-1. Push to `dev`,  `stage`, or `prod` → Pulumi automatically deploys your stack.  
-2. Run locally to test logic, endpoints, and schema changes.  
-3. Execute tests safely using SQLite.  
-4. (Soon) Get security scan reports directly from your GitLab pipelines.
+1. Pushing to `dev`, `main`, or `prod` triggers a full automated deployment to the corresponding environment.  
+2. Local development is simple and uses PostgreSQL, while tests remain isolated with SQLite.  
+3. Database seeding and data retention are controlled per environment (dev, stage, prod).  
+4. Security scans run automatically and their findings appear in GitLab’s Vulnerability Report Dashboard for actionable remediation.  
 
-This project is designed for learning purposes, showing how to combine **cloud deployments**, **infrastructure as code**, and **security automation** — all within a modern, developer-friendly workflow.
+This project is designed for learning purposes, demonstrating how **cloud deployments**, **infrastructure as code**, and **security automation** can be integrated into a developer-friendly workflow.
 
 [1]: https://gitlab.com/ferran.verdes/static/-/raw/main/images/notes-app-with-gitlab-sca-sast-and-dast-architecture-overview.png
+[2]: https://gitlab.com/ferran.verdes/static/-/raw/main/images/notes-app-with-gitlab-sca-sast-and-dast-pipeline-jobs.png
+[3]: https://gitlab.com/ferran.verdes/static/-/raw/main/images/notes-app-with-gitlab-sca-sast-and-dast-vulnerability-report.png
