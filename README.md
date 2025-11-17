@@ -5,9 +5,7 @@
 * Minimal Notes REST API (create/list notes) built with Express and Prisma.  
 * Deployed to Google Cloud Run via Pulumi, orchestrated end-to-end by GitLab CI/CD.  
 * Three fully isolated environments (**dev**, **stage**, **prod**) using separate GCP projects, credentials, and Pulumi stacks:
-
   ![Architecture overview][1]
-
 * Data seed strategy per environment: **dev** is purged and reseeded on every deploy, **stage** is seeded while preserving existing data, and **prod** is never seeded.  
 * Access control enforced with GCP IAM: **dev** is kept private, **stage** is only reachable by the GitLab DAST service account, and **prod** is publicly accessible.  
 * Security integrated into the pipeline with GitLab **SCA, SAST, IaC scanning, Secret Detection, and DAST**, with **DAST running only on `main`** so findings appear in the Vulnerability Report dashboard.  
