@@ -1,4 +1,4 @@
-# 🗒️ Notes App with GitLab SCA, SAST and DAST
+# Notes App with GitLab SCA, SAST and DAST
 
 ## ⚡ TLDR
 
@@ -459,10 +459,19 @@ Once configured:
 1. Pushing to `dev`, `main`, or `prod` triggers a full automated deployment to the corresponding environment.  
 2. Local development is simple and uses PostgreSQL, while tests remain isolated with SQLite.  
 3. Database seeding and data retention are controlled per environment (dev, stage, prod).  
-4. Security scans run automatically and their findings appear in GitLab’s Vulnerability Report Dashboard for actionable remediation.  
+4. Security scans run automatically and their findings appear in GitLab's Vulnerability Report Dashboard for actionable remediation.  
 
 This project is designed for learning purposes, demonstrating how **cloud deployments**, **infrastructure as code**, and **security automation** can be integrated into a developer-friendly workflow.
+
+## 📘 Learn About Pulumi Policies
+
+To additionally explore a practical, hands-on example of how to use **Pulumi Policies** (Policy Packs) for lightweight governance, refer to the following repository:
+
+* [Notes-App-with-Pulumi-Policy-Pack][4]
+
+This project demonstrates how policies are structured, validated, and integrated into CI/CD pipelines through Pulumi's policy engine.
 
 [1]: https://gitlab.com/ferran.verdes/static/-/raw/main/images/notes-app-with-gitlab-sca-sast-and-dast-architecture-overview.png
 [2]: https://gitlab.com/ferran.verdes/static/-/raw/main/images/notes-app-with-gitlab-sca-sast-and-dast-pipeline-jobs.png
 [3]: https://gitlab.com/ferran.verdes/static/-/raw/main/images/notes-app-with-gitlab-sca-sast-and-dast-vulnerability-report.png
+[4]: https://github.com/ferranverdes/Notes-App-with-Pulumi-Policy-Pack
